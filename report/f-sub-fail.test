@@ -1,0 +1,16 @@
++ source /home/b1f6c1c4/git-lad/tests/f-sub-fail.test
+++ git init repo
+Initialized empty Git repository in /tmp/tmp.Z4eGpnX4da/repo/.git/
+++ echo test
+++ ln -s ../another repo/lnk
++++ cd repo
++++ git-lad lnk/k
+Error: It is a file and you are looking into it: lnk
++++ echo good
+++ R=good
+++ '[' good = good ']'
++++ git -C repo ls-files -s
+++ '[' -z '' ']'
++ finish
++ cd /
++ rm -rf /tmp/tmp.Z4eGpnX4da

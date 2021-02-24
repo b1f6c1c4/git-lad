@@ -1,0 +1,9 @@
+git init repo
+mkdir another
+echo test >another/f
+ln -s ../another repo/lnk
+
+R="$(cd repo; git-lad lnk/f)"
+
+[ -z "$R" ]
+[ "$(git -C repo ls-files -s)" = $'100644 9daeafb9864cf43055ae93beb0afd6c7d144bfa4 0\tlnk/f' ]

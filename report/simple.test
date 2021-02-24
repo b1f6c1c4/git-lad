@@ -1,0 +1,14 @@
++ source /home/b1f6c1c4/git-lad/tests/simple.test
+++ git init repo
+Initialized empty Git repository in /tmp/tmp.5cHVbRoWuN/repo/.git/
+++ echo test
+++ ln -s ../another repo/lnk
++++ cd repo
++++ git-lad lnk
+++ R=
+++ '[' -z '' ']'
++++ git -C repo ls-files -s
+++ '[' '100644 9daeafb9864cf43055ae93beb0afd6c7d144bfa4 0	lnk' = '100644 9daeafb9864cf43055ae93beb0afd6c7d144bfa4 0	lnk' ']'
++ finish
++ cd /
++ rm -rf /tmp/tmp.5cHVbRoWuN

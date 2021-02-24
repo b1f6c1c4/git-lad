@@ -134,11 +134,21 @@ while [ "$#" -gt 0 ]; do
     MOD=
     SHA1=
     ACTION=
+    if [ -e "$P0" ] && [ ! -d "$P0" ] && [ ! -f "$P0" ]; then
+        echo "Error: It is something weird:" "$P0" >&2
+        [ -z "$IGNORE_ERRORS" ] && exit 1
+        continue
+    fi
+    if [ -f "$P0" ] && [ -n "$PX" ]; then
+        echo "Error: It is a file and you are looking into it:" "$P0" >&2
+        [ -z "$IGNORE_ERRORS" ] && exit 1
+        continue
+    fi
     if [ ! -e "$P" ]; then
         [ "$IGNORE_REMOVAL" = NOALL ] && continue
-        [ -n "$PX" ] && echo "Warning: It is a single file and you are removing it. You will see it again in your git status so don't be suprise." "$P0" >&2
+        [ -z "$PX" ] && echo "Warning: It is a single file and you are removing it. You will see it again in your git status so don't be suprise." "$P0" >&2
         ACTION=RM
-    elif [ -d "$P0" ] || [ -f "$P0" ]; then
+    else
         RP="$(realpath "$P" 2>/dev/null || true)"
         if [ -z "$RP" ]; then
             echo "Error: Something weird happening to:" "$P0" >&2
@@ -181,10 +191,6 @@ while [ "$#" -gt 0 ]; do
         else
             ACTION=UPDATE
         fi
-    else
-        echo "Error: It is something weird:" "$P0" >&2
-        [ -z "$IGNORE_ERRORS" ] && exit 1
-        continue
     fi
 
     if [ -n "$DRY_RUN" ] || [ -n "$VERBOSE" ]; then
@@ -212,6 +218,8 @@ while [ "$#" -gt 0 ]; do
     [ -n "$DRY_RUN" ] && continue
     [ "$ACTION" = NEW ] && git update-index --replace --add --cacheinfo "$MOD,$SHA1,$P"
     [ "$ACTION" = UPDATE ] && git update-index --cacheinfo "$MOD,$SHA1,$P"
-    [ "$ACTION" = RM ] && git update-index --force-remove -- "$P0"
+    [ "$ACTION" = RM ] && git update-index --force-remove -- "$P"
     [ ! "$ACTION" = RM ] && git update-index --skip-worktree -- "$P"
 done
+
+exit 0

@@ -1,0 +1,9 @@
+git init repo
+echo test >another
+ln -s ../another repo/lnk
+git -C repo update-index --add --cacheinfo 100755,0123456789abcdeffedcba987654321011451419,lnk
+
+R="$(cd repo; git-lad lnk)"
+
+[ -z "$R" ]
+[ "$(git -C repo ls-files -s)" = $'100644 9daeafb9864cf43055ae93beb0afd6c7d144bfa4 0\tlnk' ]

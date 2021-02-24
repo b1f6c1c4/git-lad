@@ -1,0 +1,8 @@
+git init repo
+mkdir another
+ln -s ../another repo/lnk
+
+R="$(cd repo; git-lad lnk || echo good)"
+
+[ "$R" = good ]
+[ -z "$(git -C repo ls-files -s)" ]
