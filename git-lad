@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eux
+set -eu
 
 DRY_RUN=
 VERBOSE=
@@ -14,7 +14,7 @@ IGNORE_REMOVAL=
 # --refresh
 IGNORE_ERRORS=
 # --ignore-missing
-NO_WARN_EMBEDDED_REPO=
+# --no-warn-embedded-repo
 # --renormalize
 CHMOD=
 # --pathspec-form-file
@@ -47,10 +47,6 @@ while [ "$#" -gt 0 ]; do
             IGNORE_ERRORS=YES
             shift
             ;;
-        --no-warn-embedded-repo)
-            NO_WARN_EMBEDDED_REPO=YES
-            shift
-            ;;
         --chmod=+x|--chmod=-x)
             CHMOD="$1"
             shift
@@ -78,7 +74,8 @@ while [ "$#" -gt 0 ]; do
             ;;
     esac
 done
-set -- '' "${POSITIONAL[@]}"
+
+[ "${#POSITIONAL[@]}" -gt 0 ] && set -- "${POSITIONAL[@]}" "$@"
 
 if [ "$UPDATE" = YES ] && [ "$#" -eq 0 ]; then
     echo "Error: Unsupported -u with no <pathspec>" >&2
@@ -90,7 +87,7 @@ if [ "$IGNORE_REMOVAL" = ALL ] && [ "$#" -eq 0 ]; then
     exit 1
 fi
 
-if [ "$IGNORE_REMOVAL" = ALL ] && [ "$#" -eq 0 ]; then
+if [ "$#" -eq 0 ]; then
     echo "Nothing specified, nothing added." >&2
     exit 0
 fi
@@ -114,7 +111,7 @@ while [ "$#" -gt 0 ]; do
     # Sanity check
     P0=
     PX="$P"
-    while [ -z "$PX" ]; do
+    while [ -n "$PX" ]; do
         P0="${PX%%/*}"
         if [[ "$PX" =~ / ]]; then
             PX="${PX#*/}"
@@ -137,12 +134,12 @@ while [ "$#" -gt 0 ]; do
     MOD=
     SHA1=
     ACTION=
-    if [ ! -e "$P0" ]; then
+    if [ ! -e "$P" ]; then
         [ "$IGNORE_REMOVAL" = NOALL ] && continue
         [ -n "$PX" ] && echo "Warning: It is a single file and you are removing it. You will see it again in your git status so don't be suprise." "$P0" >&2
         ACTION=RM
     elif [ -d "$P0" ] || [ -f "$P0" ]; then
-        RP="$(realapth "$P" 2>/dev/null || true)"
+        RP="$(realpath "$P" 2>/dev/null || true)"
         if [ -z "$RP" ]; then
             echo "Error: Something weird happening to:" "$P0" >&2
             [ -z "$IGNORE_ERRORS" ] && exit 1
@@ -193,10 +190,10 @@ while [ "$#" -gt 0 ]; do
     if [ -n "$DRY_RUN" ] || [ -n "$VERBOSE" ]; then
         case "$ACTION" in
             NEW)
-                echo "new $P <- $RP"
+                echo "new $P -> $RP"
                 ;;
             UPDATE)
-                echo "update $P <- $RP"
+                echo "update $P -> $RP"
                 ;;
             RM)
                 echo "rm $P"
@@ -216,5 +213,5 @@ while [ "$#" -gt 0 ]; do
     [ "$ACTION" = NEW ] && git update-index --replace --add --cacheinfo "$MOD,$SHA1,$P"
     [ "$ACTION" = UPDATE ] && git update-index --cacheinfo "$MOD,$SHA1,$P"
     [ "$ACTION" = RM ] && git update-index --force-remove -- "$P0"
-    [ ! "$ACTION" = RM ] && git update-index --skip-worktree --no-assume-unchanged -- "$P"
+    [ ! "$ACTION" = RM ] && git update-index --skip-worktree -- "$P"
 done
