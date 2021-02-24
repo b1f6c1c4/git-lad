@@ -1,0 +1,220 @@
+#!/bin/bash
+
+set -eux
+
+DRY_RUN=
+VERBOSE=
+# -f, --force
+# -i, --interactive
+# -p, --patch
+# -e, --edit
+UPDATE=
+IGNORE_REMOVAL=
+# -N, --intent-to-add
+# --refresh
+IGNORE_ERRORS=
+# --ignore-missing
+NO_WARN_EMBEDDED_REPO=
+# --renormalize
+CHMOD=
+# --pathspec-form-file
+# --pathspec-file-nul
+
+POSITIONAL=()
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -n|--dry-run)
+            DRY_RUN=YES
+            shift
+            ;;
+        -v|--verbose)
+            VERBOSE=YES
+            shift
+            ;;
+        -u|--update)
+            UPDATE=YES
+            shift
+            ;;
+        -A|--all|--no-ignore-removal)
+            IGNORE_REMOVAL=ALL
+            shift
+            ;;
+        --no-all|--ignore-removal)
+            IGNORE_REMOVAL=NOALL
+            shift
+            ;;
+        --ignore-errors)
+            IGNORE_ERRORS=YES
+            shift
+            ;;
+        --no-warn-embedded-repo)
+            NO_WARN_EMBEDDED_REPO=YES
+            shift
+            ;;
+        --chmod=+x|--chmod=-x)
+            CHMOD="$1"
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        --*)
+            echo "Error: Unsupported argument $1" >&2
+            exit 1
+            ;;
+        *)
+            if [[ "$1" =~ ^-.. ]]; then
+                T="$1"
+                shift
+                set -- '' "${T:0:2}" "-${T:2}" "$@"
+            elif [[ "$1" =~ ^- ]]; then
+                echo "Error: Unrecognized argument $1" >&2
+                exit 1
+            else
+                POSITIONAL+=("$1")
+            fi
+            shift
+            ;;
+    esac
+done
+set -- '' "${POSITIONAL[@]}"
+
+if [ "$UPDATE" = YES ] && [ "$#" -eq 0 ]; then
+    echo "Error: Unsupported -u with no <pathspec>" >&2
+    exit 1
+fi
+
+if [ "$IGNORE_REMOVAL" = ALL ] && [ "$#" -eq 0 ]; then
+    echo "Error: Unsupported -A with no <pathspec>" >&2
+    exit 1
+fi
+
+if [ "$IGNORE_REMOVAL" = ALL ] && [ "$#" -eq 0 ]; then
+    echo "Nothing specified, nothing added." >&2
+    exit 0
+fi
+
+while [ "$#" -gt 0 ]; do
+    P="$1"
+    shift
+
+    if [ -z "$P" ]; then
+        echo "Error: Your <pathspec> is empty." >&2
+        [ -z "$IGNORE_ERRORS" ] && exit 1
+        continue
+    fi
+    while [[ "$P" =~ /$ ]]; do
+        P="${P%/}"
+    done
+    while [[ "$P" =~ // ]]; do
+        P="${P/\/\//\//}"
+    done
+
+    # Sanity check
+    P0=
+    PX="$P"
+    while [ -z "$PX" ]; do
+        P0="${PX%%/*}"
+        if [[ "$PX" =~ / ]]; then
+            PX="${PX#*/}"
+        else
+            PX=
+        fi
+        if [ -L "$P0" ]; then
+            break
+        fi
+        P0=
+    done
+    if [ -z "$P0" ]; then
+        echo "Error: There is no symlink for" "$P" >&2
+        [ -z "$IGNORE_ERRORS" ] && exit 1
+        continue
+    fi
+
+    # Decide action
+    RP=
+    MOD=
+    SHA1=
+    ACTION=
+    if [ ! -e "$P0" ]; then
+        [ "$IGNORE_REMOVAL" = NOALL ] && continue
+        [ -n "$PX" ] && echo "Warning: It is a single file and you are removing it. You will see it again in your git status so don't be suprise." "$P0" >&2
+        ACTION=RM
+    elif [ -d "$P0" ] || [ -f "$P0" ]; then
+        RP="$(realapth "$P" 2>/dev/null || true)"
+        if [ -z "$RP" ]; then
+            echo "Error: Something weird happening to:" "$P0" >&2
+            [ -z "$IGNORE_ERRORS" ] && exit 1
+            continue
+        fi
+        if [ -d "$RP" ]; then
+            if git -C "$RP" rev-parse --git-dir >/dev/null 2>/dev/null; then
+                SHA1="$(git -C "$RP" rev-parse HEAD)"
+                if [ -z "$SHA1" ]; then
+                    echo "Error: It is something weird:" "$P0" >&2
+                    [ -z "$IGNORE_ERRORS" ] && exit 1
+                    continue
+                fi
+                MOD=160000
+            else
+                echo "Error: You cannot git-lad a folder. Please specify individual items." "$P" >&2
+                [ -z "$IGNORE_ERRORS" ] && exit 1
+                continue
+            fi
+        else
+            ARGS=(-t blob)
+            [ -z "$DRY_RUN" ] && ARGS+=(-w)
+            ARGS+=("--path=$P")
+            ARGS+=(-- "$RP")
+            SHA1="$(git hash-object "${ARGS[@]}")"
+            if [ "$CHMOD" = "--chmod+x" ]; then
+                MOD=100755
+            elif [ "$CHMOD" = "--chmod-x" ]; then
+                MOD=100644
+            elif [ -x "$RP" ]; then
+                MOD=100755
+            else
+                MOD=100644
+            fi
+        fi
+        if [ -z "$(git ls-files -s "$P")" ]; then
+            [ -n "$UPDATE" ] && continue
+            ACTION=NEW
+        else
+            ACTION=UPDATE
+        fi
+    else
+        echo "Error: It is something weird:" "$P0" >&2
+        [ -z "$IGNORE_ERRORS" ] && exit 1
+        continue
+    fi
+
+    if [ -n "$DRY_RUN" ] || [ -n "$VERBOSE" ]; then
+        case "$ACTION" in
+            NEW)
+                echo "new $P <- $RP"
+                ;;
+            UPDATE)
+                echo "update $P <- $RP"
+                ;;
+            RM)
+                echo "rm $P"
+                ;;
+        esac
+    fi
+    if [ -n "$VERBOSE" ]; then
+        if [ ! "$ACTION" = RM ]; then
+            echo "git update-index --cacheinfo $MOD,$SHA1,$P # $RP"
+        else
+            echo "git update-index --force-remove $P"
+        fi
+    fi
+
+    # Update index
+    [ -n "$DRY_RUN" ] && continue
+    [ "$ACTION" = NEW ] && git update-index --replace --add --cacheinfo "$MOD,$SHA1,$P"
+    [ "$ACTION" = UPDATE ] && git update-index --cacheinfo "$MOD,$SHA1,$P"
+    [ "$ACTION" = RM ] && git update-index --force-remove -- "$P0"
+    [ ! "$ACTION" = RM ] && git update-index --skip-worktree --no-assume-unchanged -- "$P"
+done

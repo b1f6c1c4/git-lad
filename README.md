@@ -20,6 +20,8 @@ Cons:
     making sure that everything is up-to-date.
 - `git rebase` and `git merge` may work or not work.
 - You must specify individual files/submodules to add, instead of a folder.
+- No built-in glob support. Use your shell's glob.
+- No `.gitignore` support.
 
 ## Usage
 
